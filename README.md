@@ -1,0 +1,1 @@
+Pour compiler les messages customs, il faut que PIO recompile la lib microROS. Pour l'instant la seule technique trouvé est de supprimer son dossier dans `.pio/libdeps/esp32s3/micro_ros_platformio` pour forcer son recompilage.
