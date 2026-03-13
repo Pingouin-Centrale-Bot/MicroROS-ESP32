@@ -4,7 +4,8 @@
 #include "FastAccelStepper.h"
 #include "config.h"
 
-struct wheelsState {
+struct wheelsState
+{
     double w1; // rad/s
     double w2; // rad/s
     double w3; // rad/s
@@ -23,6 +24,8 @@ public:
     void enable_motors();
     void set_speed(double w1, double w2, double w3, double w4);
     wheelsState get_current_state();
+    uint16_t get_current() const { return _current_ma; }
+    void set_current(uint16_t current, float hold_multiplier = (.3F));
 
 private:
     TMC2209 *_M1_driver;
@@ -36,16 +39,16 @@ private:
     FastAccelStepper *_M3_stepper = NULL;
     FastAccelStepper *_M4_stepper = NULL;
 
-    // Constant for: (Steps per Rev / 2PI) * 1000ms * Microsteps (rad/s to milliHz)
-    const double _K = (M_DRIVE_STEPS_PER_TURN / (2.0 * M_PI)) * 1000.0 * M_DRIVE_MICROSTEP;
+    uint16_t _current_ma = 32;
+
+    const double _K = (M_DRIVE_STEPS_PER_TURN / (2.0 * M_PI)) * 1000.0 * M_DRIVE_MICROSTEP; // Constant for: (Steps per Rev / 2PI) * 1000ms * Microsteps (rad/s to milliHz)
     const int32_t _ACCEL = 5 * M_DRIVE_STEPS_PER_TURN * M_DRIVE_MICROSTEP;
-    const int32_t _min_speed_millihz = 1/.02*1000;  // Should at least go at a certain speed, to prevent a step further than 20ms in the futur making the motor unresponsive
+    const int32_t _min_speed_millihz = 1 / .02 * 1000; // Should at least go at a certain speed, to prevent a step further than 20ms in the futur making the motor unresponsive
 
     gpio_num_t _en_pin;
 
     bool _enabled;
 
-    void set_RMS(uint16_t current);
     void set_microstep(uint16_t ms);
     bool is_running();
 };

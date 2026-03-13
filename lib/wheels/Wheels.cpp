@@ -27,7 +27,7 @@ Wheels::Wheels()
     _M3_driver->enableAutomaticGradientAdaptation();
     _M4_driver->enableAutomaticGradientAdaptation();
 
-    set_RMS(M_DRIVE_CURRENT_MA);
+    set_current(_current_ma);
     set_microstep(M_DRIVE_MICROSTEP);
 
     _M1_driver->enable();
@@ -136,12 +136,14 @@ bool Wheels::is_running()
     return _enabled || _M1_stepper->isRunning() || _M2_stepper->isRunning() || _M3_stepper->isRunning() || _M4_stepper->isRunning();
 }
 
-void Wheels::set_RMS(uint16_t current)
+void Wheels::set_current(uint16_t current_ma, float hold_multiplier)
 {
-    _M1_driver->setRMSCurrent(current, M_R_SENSE);
-    _M2_driver->setRMSCurrent(current, M_R_SENSE);
-    _M3_driver->setRMSCurrent(current, M_R_SENSE);
-    _M4_driver->setRMSCurrent(current, M_R_SENSE);
+    _current_ma = current_ma;
+    _M1_driver->setRMSCurrent(current_ma, M_R_SENSE, hold_multiplier);
+    _M2_driver->setRMSCurrent(current_ma, M_R_SENSE, hold_multiplier);
+    _M3_driver->setRMSCurrent(current_ma, M_R_SENSE, hold_multiplier);
+    _M4_driver->setRMSCurrent(current_ma, M_R_SENSE, hold_multiplier);
+    log_v("Driver current set to %dmA", current_ma);
 }
 
 void Wheels::set_microstep(uint16_t ms)

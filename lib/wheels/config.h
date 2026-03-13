@@ -8,7 +8,6 @@
 #define M_DRIVE_RX 18          // For setting TMC2209 parameters
 #define M_DRIVE_TX 17          // For setting TMC2209 parameters
 #define M_DRIVE_SERIAL Serial1 // For setting TMC2209 parameters
-#define M_DRIVE_CURRENT_MA 1000
 #define M_DRIVE_STEPS_PER_TURN 200
 #define M_DRIVE_MICROSTEP 32 // default motor microstep
 

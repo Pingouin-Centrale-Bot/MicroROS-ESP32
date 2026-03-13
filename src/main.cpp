@@ -4,6 +4,7 @@
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
+#include <rclc_parameter/rclc_parameter.h>
 
 #include <std_msgs/msg/int32.h>
 #include <sensor_msgs/msg/joint_state.h>
@@ -14,7 +15,7 @@
 #include "Wheels.h"
 
 const unsigned int health_timer_timeout = 1000; // ms
-const unsigned int wheels_timer_timeout = 100;
+unsigned int wheels_timer_timeout = 100;
 
 rcl_publisher_t health_publisher;
 rcl_publisher_t wheels_publisher;
@@ -53,6 +54,7 @@ void init_wheel_joint_message()
 rclc_executor_t executor;
 rclc_support_t support;
 rcl_allocator_t allocator;
+rclc_parameter_server_t param_server;
 rcl_node_t node;
 rcl_timer_t health_timer;
 rcl_timer_t wheels_timer;
@@ -79,14 +81,84 @@ Wheels *wheels = NULL;
     }                                                                    \
   } while (0)
 
-// Error handle loop
-void error_loop()
+bool on_parameter_changed(const Parameter *old_param, const Parameter *new_param, void *context)
 {
-  while (true)
+  (void)context;
+
+  if (old_param == NULL && new_param == NULL)
   {
-    log_e("A blocking rclc error occured !");
-    delay(1000);
+    log_i("Callback error, both parameters are NULL");
+    return false;
   }
+
+  if (old_param == NULL)
+  {
+    log_i("Creating new parameter %s", new_param->name.data);
+  }
+  else if (new_param == NULL)
+  {
+    log_i("Deleting parameter %s", old_param->name.data);
+  }
+  else
+  {
+    log_i("Parameter %s modified.", old_param->name.data);
+    switch (old_param->value.type)
+    {
+    case RCLC_PARAMETER_BOOL:
+      log_i(
+          " -> Old value: %d, New value: %d (bool)", old_param->value.bool_value,
+          new_param->value.bool_value);
+      break;
+    case RCLC_PARAMETER_INT:
+      log_i(
+          " -> Old value: %ld, New value: %ld (int)", old_param->value.integer_value,
+          new_param->value.integer_value);
+      if (strcmp(new_param->name.data, "wheels_current") == 0)
+      {
+        int64_t current_ma = new_param->value.integer_value;
+        if (current_ma > 0 && current_ma <= 2000)
+        {
+          wheels->set_current(current_ma);
+        }
+        else
+        {
+          log_e("Invalid current value!");
+        }
+      }
+      else if (strcmp(new_param->name.data, "wheels_feedback_frequency") == 0)
+      {
+        int64_t new_frequency = 1000LL / new_param->value.integer_value;
+
+        // 1. Safety Check
+        if (new_frequency <= 0 || new_frequency > 50)
+          return false;
+
+        // 2. Update the timer period
+        // This function takes nanoseconds (NS)
+        int64_t old_period_ns;
+        rcl_ret_t rc = rcl_timer_exchange_period(
+            &wheels_timer,
+            RCL_MS_TO_NS(1000LL / new_frequency),
+            &old_period_ns);
+
+        if (rc == RCL_RET_OK)
+        {
+          printf("Wheels timer updated from %lld to %lld ms\n", old_period_ns / 1000000, 1000LL / new_frequency);
+          return true;
+        }
+      }
+      break;
+    case RCLC_PARAMETER_DOUBLE:
+      log_i(
+          " -> Old value: %f, New value: %f (double)", old_param->value.double_value,
+          new_param->value.double_value);
+      break;
+    default:
+      break;
+    }
+  }
+
+  return true;
 }
 
 void health_timer_callback(rcl_timer_t *timer, int64_t last_call_time)
@@ -195,11 +267,28 @@ void setup()
   health_msg.data = 0;
   init_wheel_joint_message();
 
+  // Create parameter service
+  RCCHECK(rclc_parameter_server_init_default(&param_server, &node));
+
+  // Add parameters
+  RCCHECK(rclc_add_parameter(&param_server, "wheels_current", RCLC_PARAMETER_INT));
+  RCCHECK(rclc_add_parameter(&param_server, "wheels_feedback_frequency", RCLC_PARAMETER_INT));
+
+  RCCHECK(rclc_parameter_set_int(&param_server, "wheels_current", wheels->get_current()));
+  RCCHECK(rclc_parameter_set_int(&param_server, "wheels_feedback_frequency", (int64_t)(1000 / wheels_timer_timeout)));
+
+  // Add parameters constraints
+  RCCHECK(rclc_add_parameter_description(&param_server, "wheels_current", "Courant en mA utilisé pour les steppers", "Positif, inférieur à 2000"));
+  RCCHECK(rclc_add_parameter_description(&param_server, "wheels_feedback_frequency", "Fréquence d'envoie des jointState des roues", "Positif, inférieur à 50Hz (arbitraire)"));
+  RCCHECK(rclc_add_parameter_constraint_integer(&param_server, "wheels_current", 0, 2000, 1));
+  RCCHECK(rclc_add_parameter_constraint_integer(&param_server, "wheels_feedback_frequency", 1, 50, 1));
+
   // create executor
   RCCHECK(rclc_executor_init(&executor, &support.context, 3, &allocator));
   RCCHECK(rclc_executor_add_timer(&executor, &health_timer));
   RCCHECK(rclc_executor_add_timer(&executor, &wheels_timer));
   RCCHECK(rclc_executor_add_subscription(&executor, &wheels_subscriber, &wheels_speed_msg, &wheels_command_callback, ON_NEW_DATA));
+  RCCHECK(rclc_executor_add_parameter_server(&executor, &param_server, on_parameter_changed));
 
   // sync time
   while (rmw_uros_sync_session(1000) != RMW_RET_OK)
