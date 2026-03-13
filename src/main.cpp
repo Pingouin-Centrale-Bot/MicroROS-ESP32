@@ -137,7 +137,14 @@ void setup()
   // Configure serial transport
   Serial.begin(115200);
   set_microros_serial_transports(Serial);
-  delay(2000);
+
+  while (rmw_uros_ping_agent(1000, 1) != RMW_RET_OK)
+  {
+    static uint i = 0;
+    log_w("Waiting for agent, %d failed pings", ++i);
+  }
+  log_i("Agent found, starting up");
+
   allocator = rcl_get_default_allocator();
 
   // create init_options
