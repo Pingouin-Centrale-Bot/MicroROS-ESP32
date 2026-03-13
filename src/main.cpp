@@ -102,7 +102,11 @@ void wheels_timer_callback(rcl_timer_t *timer, int64_t last_call_time)
   RCLC_UNUSED(last_call_time);
   if (timer != NULL)
   {
+    uint64_t now_ns = rmw_uros_epoch_nanos();
     wheelsState current_state = wheels->get_current_state();
+
+    wheels_state_msg.header.stamp.sec = (int32_t)(now_ns / 1000000000LL);
+    wheels_state_msg.header.stamp.nanosec = (uint32_t)(now_ns % 1000000000LL);
 
     wheels_state_msg.velocity.data[0] = current_state.w1;
     wheels_state_msg.velocity.data[1] = current_state.w2;
@@ -193,6 +197,13 @@ void setup()
   RCCHECK(rclc_executor_add_timer(&executor, &health_timer));
   RCCHECK(rclc_executor_add_timer(&executor, &wheels_timer));
   RCCHECK(rclc_executor_add_subscription(&executor, &wheels_subscriber, &wheels_speed_msg, &wheels_command_callback, ON_NEW_DATA));
+
+  // sync time
+  while (rmw_uros_sync_session(1000) != RMW_RET_OK)
+  {
+    log_e("Failed to sync time, trying again");
+  }
+  log_i("Time synced");
 
   // Energize hardware
   wheels->enable_motors();
