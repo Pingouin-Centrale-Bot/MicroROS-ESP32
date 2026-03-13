@@ -39,7 +39,7 @@ private:
     // Constant for: (Steps per Rev / 2PI) * 1000ms * Microsteps (rad/s to milliHz)
     const double _K = (M_DRIVE_STEPS_PER_TURN / (2.0 * M_PI)) * 1000.0 * M_DRIVE_MICROSTEP;
     const int32_t _ACCEL = 5 * M_DRIVE_STEPS_PER_TURN * M_DRIVE_MICROSTEP;
-    const int32_t _min_speed_millihz = 11*1000;  // Should at least go at 10hz, or else stop
+    const int32_t _min_speed_millihz = 1/.02*1000;  // Should at least go at a certain speed, to prevent a step further than 20ms in the futur making the motor unresponsive
 
     gpio_num_t _en_pin;
 

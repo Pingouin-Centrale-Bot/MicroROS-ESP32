@@ -39,20 +39,22 @@ Wheels::Wheels()
     _M1_stepper = _stepper_engine.stepperConnectToPin(M1_STP_PIN);
     _M1_stepper->setDirectionPin(M1_DIR_PIN);
     _M1_stepper->setAcceleration(_ACCEL);
-    //_M1_stepper->attachToPulseCounter(); We will try not to have to use it
+    _M1_stepper->setForwardPlanningTimeInMs(10);
 
     _M2_stepper = _stepper_engine.stepperConnectToPin(M2_STP_PIN);
     _M2_stepper->setDirectionPin(M2_DIR_PIN);
     _M2_stepper->setAcceleration(_ACCEL);
-    //_M2_stepper->attachToPulseCounter();
+    _M2_stepper->setForwardPlanningTimeInMs(10);
 
     _M3_stepper = _stepper_engine.stepperConnectToPin(M3_STP_PIN);
     _M3_stepper->setDirectionPin(M3_DIR_PIN);
     _M3_stepper->setAcceleration(_ACCEL);
+    _M3_stepper->setForwardPlanningTimeInMs(10);
 
     _M4_stepper = _stepper_engine.stepperConnectToPin(M4_STP_PIN);
     _M4_stepper->setDirectionPin(M4_DIR_PIN);
     _M4_stepper->setAcceleration(_ACCEL);
+    _M4_stepper->setForwardPlanningTimeInMs(10);
 
     _en_pin = (gpio_num_t)M_DRIVE_EN_PIN;
     gpio_reset_pin(_en_pin);
@@ -89,8 +91,6 @@ void Wheels::set_speed(double w1, double w2, double w3, double w4)
         speeds_milliHz[i] = abs(speeds[i]) * _K;
         if (speeds_milliHz[i] >= _min_speed_millihz)
             motors[i]->setSpeedInMilliHz(speeds_milliHz[i]);
-
-        log_v("Running motor %d at %dmilliHz", i, speeds_milliHz[i]);
     }
 
     // 3. Phase Two: Update all directions/states immediately after
@@ -109,6 +109,8 @@ void Wheels::set_speed(double w1, double w2, double w3, double w4)
             motors[i]->runBackward();
         }
     }
+
+    log_v("Running motors at [%d, %d, %d, %d]milliHz", speeds_milliHz[0], speeds_milliHz[1], speeds_milliHz[2], speeds_milliHz[3]);
 }
 
 wheelsState Wheels::get_current_state()
@@ -120,6 +122,7 @@ wheelsState Wheels::get_current_state()
     wheels_state.w3 = _M3_stepper->getCurrentSpeedInMilliHz(false) / _K;
     wheels_state.w4 = _M4_stepper->getCurrentSpeedInMilliHz(false) / _K;
 
+    // Not precise for ESP32, but won't fix because will soon be ported to rp2350
     wheels_state.p1 = _M1_stepper->getCurrentPosition() / _K * 1000.0;
     wheels_state.p2 = _M2_stepper->getCurrentPosition() / _K * 1000.0;
     wheels_state.p3 = _M3_stepper->getCurrentPosition() / _K * 1000.0;
