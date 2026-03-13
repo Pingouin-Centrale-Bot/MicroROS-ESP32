@@ -59,22 +59,25 @@ rcl_timer_t wheels_timer;
 
 Wheels *wheels = NULL;
 
-#define RCCHECK(fn)              \
-  {                              \
-    rcl_ret_t temp_rc = fn;      \
-    if ((temp_rc != RCL_RET_OK)) \
-    {                            \
-      error_loop();              \
-    }                            \
-  }
-#define RCSOFTCHECK(fn)                \
-  {                                    \
-    rcl_ret_t temp_rc = fn;            \
-    if ((temp_rc != RCL_RET_OK))       \
-    {                                  \
-      log_e("A rclc error occured !"); \
-    }                                  \
-  }
+#define RCCHECK(fn)                                                               \
+  do                                                                              \
+  {                                                                               \
+    rcl_ret_t temp_rc = fn;                                                       \
+    if ((temp_rc != RCL_RET_OK))                                                  \
+    {                                                                             \
+      log_e("Unrecoverable rclc error %d at %s:%d", temp_rc, __FILE__, __LINE__); \
+      esp_restart();                                                              \
+    }                                                                             \
+  } while (0)
+#define RCSOFTCHECK(fn)                                                  \
+  do                                                                     \
+  {                                                                      \
+    rcl_ret_t temp_rc = fn;                                              \
+    if ((temp_rc != RCL_RET_OK))                                         \
+    {                                                                    \
+      log_e("Soft rclc error %d at %s:%d", temp_rc, __FILE__, __LINE__); \
+    }                                                                    \
+  } while (0)
 
 // Error handle loop
 void error_loop()
