@@ -46,6 +46,8 @@ void init_wheel_joint_message()
 
   // Optional: effort is usually empty, but good to set size to 0
   wheels_state_msg.effort.size = 0;
+
+  rosidl_runtime_c__String__assign(&wheels_state_msg.header.frame_id, "base_link");
 }
 
 rclc_executor_t executor;
@@ -100,7 +102,19 @@ void wheels_timer_callback(rcl_timer_t *timer, int64_t last_call_time)
   RCLC_UNUSED(last_call_time);
   if (timer != NULL)
   {
-    // TODO
+    wheelsState current_state = wheels->get_current_state();
+
+    wheels_state_msg.velocity.data[0] = current_state.w1;
+    wheels_state_msg.velocity.data[1] = current_state.w2;
+    wheels_state_msg.velocity.data[2] = current_state.w3;
+    wheels_state_msg.velocity.data[3] = current_state.w4;
+
+    wheels_state_msg.position.data[0] = current_state.p1;
+    wheels_state_msg.position.data[1] = current_state.p2;
+    wheels_state_msg.position.data[2] = current_state.p3;
+    wheels_state_msg.position.data[3] = current_state.p4;
+
+    RCSOFTCHECK(rcl_publish(&wheels_publisher, &wheels_state_msg, NULL));
   }
 }
 

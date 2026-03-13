@@ -79,27 +79,53 @@ void Wheels::enable_motors()
 void Wheels::set_speed(double w1, double w2, double w3, double w4)
 {
     double speeds[4] = {w1, w2, w3, w4};
+    uint32_t speeds_milliHz[4];
     // 1. Storage for processed data
-    FastAccelStepper* motors[] = {_M1_stepper, _M2_stepper, _M3_stepper, _M4_stepper};
+    FastAccelStepper *motors[] = {_M1_stepper, _M2_stepper, _M3_stepper, _M4_stepper};
 
     // 2. Phase One: Update all frequencies first
-    for (int i = 0; i < 4; i++) {
-        motors[i]->setSpeedInMilliHz(abs(speeds[i]) * _K);
+    for (int i = 0; i < 4; i++)
+    {
+        speeds_milliHz[i] = abs(speeds[i]) * _K;
+        if (speeds_milliHz[i] >= _min_speed_millihz)
+            motors[i]->setSpeedInMilliHz(speeds_milliHz[i]);
+
+        log_v("Running motor %d at %dmilliHz", i, speeds_milliHz[i]);
     }
 
     // 3. Phase Two: Update all directions/states immediately after
-    for (int i = 0; i < 4; i++) {
-        double speed_mhz = abs(speeds[i]) * _K;
-        log_v("Running motor %d at %fmilliHz", i, speed_mhz);
-
-        if (speed_mhz < 0.01) {
+    for (int i = 0; i < 4; i++)
+    {
+        if (speeds_milliHz[i] < _min_speed_millihz)
+        {
             motors[i]->stopMove();
-        } else if (speeds[i] > 0) {
+        }
+        else if (speeds[i] > 0)
+        {
             motors[i]->runForward();
-        } else {
+        }
+        else
+        {
             motors[i]->runBackward();
         }
     }
+}
+
+wheelsState Wheels::get_current_state()
+{
+    wheelsState wheels_state = wheelsState();
+
+    wheels_state.w1 = _M1_stepper->getCurrentSpeedInMilliHz(false) / _K;
+    wheels_state.w2 = _M2_stepper->getCurrentSpeedInMilliHz(false) / _K;
+    wheels_state.w3 = _M3_stepper->getCurrentSpeedInMilliHz(false) / _K;
+    wheels_state.w4 = _M4_stepper->getCurrentSpeedInMilliHz(false) / _K;
+
+    wheels_state.p1 = _M1_stepper->getCurrentPosition() / _K * 1000.0;
+    wheels_state.p2 = _M2_stepper->getCurrentPosition() / _K * 1000.0;
+    wheels_state.p3 = _M3_stepper->getCurrentPosition() / _K * 1000.0;
+    wheels_state.p4 = _M4_stepper->getCurrentPosition() / _K * 1000.0;
+
+    return wheels_state;
 }
 
 bool Wheels::is_running()
