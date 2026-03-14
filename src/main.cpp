@@ -12,6 +12,7 @@
 
 #include <robot_messages/msg/wheels_command.h>
 
+#include "battery.h"
 #include "Wheels.h"
 
 const unsigned int health_timer_timeout = 1000; // ms
@@ -80,6 +81,17 @@ Wheels *wheels = NULL;
       log_e("Soft rclc error %d at %s:%d", temp_rc, __FILE__, __LINE__); \
     }                                                                    \
   } while (0)
+
+void check_battery()
+{
+  if (battery_empty)
+  {
+    wheels->disable_motors();
+    log_e("Battery empty ! (%d millivolts)", measure_battery());
+    log_e("Actuators shutdown");
+    log_e("Change battery and reset to continue");
+  }
+}
 
 bool on_parameter_changed(const Parameter *old_param, const Parameter *new_param, void *context)
 {
@@ -166,9 +178,10 @@ void health_timer_callback(rcl_timer_t *timer, int64_t last_call_time)
   RCLC_UNUSED(last_call_time);
   if (timer != NULL)
   {
-    log_d("Publishing health (%d)", health_msg.data);
+    health_msg.data = measure_battery();
+    log_i("Publishing health (%d millivolts)", health_msg.data);
     RCSOFTCHECK(rcl_publish(&health_publisher, &health_msg, NULL));
-    health_msg.data++;
+    check_battery();
   }
 }
 
@@ -212,6 +225,8 @@ void setup()
   log_i("Initializing");
   // Init hardware
   wheels = new Wheels();
+  init_battery();
+  check_battery();
 
   // Configure serial transport
   Serial.begin(115200);

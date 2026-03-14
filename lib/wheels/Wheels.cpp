@@ -1,5 +1,6 @@
 #include "Wheels.h"
 #include "config.h"
+#include "battery.h"
 
 Wheels::Wheels()
 {
@@ -73,9 +74,16 @@ void Wheels::disable_motors()
 
 void Wheels::enable_motors()
 {
-    log_i("Enabling motors");
-    gpio_set_level(_en_pin, 0);
-    _enabled = false;
+    if (!battery_empty)
+    {
+        log_i("Enabling motors");
+        gpio_set_level(_en_pin, 0);
+        _enabled = false;
+    }
+    else
+    {
+        log_e("Couldn't enable motors: battery empty");
+    }
 }
 
 void Wheels::set_speed(double w1, double w2, double w3, double w4)
