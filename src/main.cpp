@@ -99,7 +99,6 @@ void check_battery()
     log_e("Battery empty ! (%d millivolts)", measure_battery());
     log_e("Actuators shutdown");
     log_e("Change battery and reset to continue");
-    while (true);
   }
 }
 
