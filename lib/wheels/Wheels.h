@@ -39,7 +39,7 @@ private:
     FastAccelStepper *_M3_stepper = NULL;
     FastAccelStepper *_M4_stepper = NULL;
 
-    uint16_t _current_ma = 32;
+    uint16_t _current_ma = 1000;
 
     const double _K = (M_DRIVE_STEPS_PER_TURN / (2.0 * M_PI)) * 1000.0 * M_DRIVE_MICROSTEP; // Constant for: (Steps per Rev / 2PI) * 1000ms * Microsteps (rad/s to milliHz)
     const int32_t _ACCEL = 17 * M_DRIVE_STEPS_PER_TURN * M_DRIVE_MICROSTEP; // Max acceleration of 1020rot/min², equivalent to 3.2 m/s²
