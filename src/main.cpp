@@ -23,31 +23,39 @@ rcl_publisher_t wheels_publisher;
 rcl_subscription_t wheels_subscriber;
 std_msgs__msg__Int32 health_msg;
 robot_messages__msg__WheelsCommand wheels_speed_msg;
+
 sensor_msgs__msg__JointState wheels_state_msg;
+rosidl_runtime_c__String joint_names_buffer[4];
+double joint_position_buffer[4];
+double joint_velocity_buffer[4];
 void init_wheel_joint_message()
 {
   // Initialize the structure
   sensor_msgs__msg__JointState__init(&wheels_state_msg);
 
   // 2. Allocate memory for Names (4 strings)
-  rosidl_runtime_c__String__Sequence__init(&wheels_state_msg.name, 4);
+  wheels_state_msg.name.data = joint_names_buffer;
+  wheels_state_msg.name.size = 4;
+  wheels_state_msg.name.capacity = 4;
   rosidl_runtime_c__String__assign(&wheels_state_msg.name.data[0], "lf_joint");
   rosidl_runtime_c__String__assign(&wheels_state_msg.name.data[1], "rf_joint");
   rosidl_runtime_c__String__assign(&wheels_state_msg.name.data[2], "rb_joint");
   rosidl_runtime_c__String__assign(&wheels_state_msg.name.data[3], "lb_joint");
 
   // 3. Allocate memory for Velocity (4 floats)
-  wheels_state_msg.velocity.data = (double *)malloc(4 * sizeof(double));
+  wheels_state_msg.velocity.data = joint_velocity_buffer;
   wheels_state_msg.velocity.size = 4;
   wheels_state_msg.velocity.capacity = 4;
 
   // 4. Allocate memory for Position (4 floats)
-  wheels_state_msg.position.data = (double *)malloc(4 * sizeof(double));
+  wheels_state_msg.position.data = joint_position_buffer;
   wheels_state_msg.position.size = 4;
   wheels_state_msg.position.capacity = 4;
 
   // Optional: effort is usually empty, but good to set size to 0
+  wheels_state_msg.effort.data = NULL;
   wheels_state_msg.effort.size = 0;
+  wheels_state_msg.effort.capacity = 0;
 
   rosidl_runtime_c__String__assign(&wheels_state_msg.header.frame_id, "base_link");
 }
@@ -62,24 +70,25 @@ rcl_timer_t wheels_timer;
 
 Wheels *wheels = NULL;
 
-#define RCCHECK(fn)                                                               \
-  do                                                                              \
-  {                                                                               \
-    rcl_ret_t temp_rc = fn;                                                       \
-    if ((temp_rc != RCL_RET_OK))                                                  \
-    {                                                                             \
-      log_e("Unrecoverable rclc error %d at %s:%d", temp_rc, __FILE__, __LINE__); \
-      esp_restart();                                                              \
-    }                                                                             \
+#define RCCHECK(fn)                                                                                               \
+  do                                                                                                              \
+  {                                                                                                               \
+    rcl_ret_t temp_rc = fn;                                                                                       \
+    if ((temp_rc != RCL_RET_OK))                                                                                  \
+    {                                                                                                             \
+      log_e("Unrecoverable rclc error %d: %s at %s:%d", temp_rc, rcl_get_error_string().str, __FILE__, __LINE__); \
+      rcl_reset_error();                                                                                          \
+      esp_restart();                                                                                              \
+    }                                                                                                             \
   } while (0)
-#define RCSOFTCHECK(fn)                                                  \
-  do                                                                     \
-  {                                                                      \
-    rcl_ret_t temp_rc = fn;                                              \
-    if ((temp_rc != RCL_RET_OK))                                         \
-    {                                                                    \
-      log_e("Soft rclc error %d at %s:%d", temp_rc, __FILE__, __LINE__); \
-    }                                                                    \
+#define RCSOFTCHECK(fn)                                                                                  \
+  do                                                                                                     \
+  {                                                                                                      \
+    rcl_ret_t temp_rc = fn;                                                                              \
+    if ((temp_rc != RCL_RET_OK))                                                                         \
+    {                                                                                                    \
+      log_e("Soft rclc error %d: %s at %s:%d", temp_rc, rcl_get_error_string().str, __FILE__, __LINE__); \
+    }                                                                                                    \
   } while (0)
 
 void check_battery()
@@ -90,6 +99,7 @@ void check_battery()
     log_e("Battery empty ! (%d millivolts)", measure_battery());
     log_e("Actuators shutdown");
     log_e("Change battery and reset to continue");
+    while (true);
   }
 }
 
@@ -123,7 +133,7 @@ bool on_parameter_changed(const Parameter *old_param, const Parameter *new_param
       break;
     case RCLC_PARAMETER_INT:
       log_i(
-          " -> Old value: %ld, New value: %ld (int)", old_param->value.integer_value,
+          " -> Old value: %lld, New value: %lld (int)", old_param->value.integer_value,
           new_param->value.integer_value);
       if (strcmp(new_param->name.data, "wheels_current") == 0)
       {
@@ -131,16 +141,17 @@ bool on_parameter_changed(const Parameter *old_param, const Parameter *new_param
         if (current_ma > 0 && current_ma <= 2000)
         {
           wheels->set_current(current_ma);
+          return true;
         }
         else
         {
           log_e("Invalid current value!");
+          return false;
         }
       }
       else if (strcmp(new_param->name.data, "wheels_feedback_frequency") == 0)
       {
-        int64_t new_frequency = 1000LL / new_param->value.integer_value;
-
+        int64_t new_frequency = new_param->value.integer_value;
         // 1. Safety Check
         if (new_frequency <= 0 || new_frequency > 50)
           return false;
@@ -228,6 +239,10 @@ void setup()
   init_battery();
   check_battery();
 
+  // init msgs
+  health_msg.data = 0;
+  init_wheel_joint_message();
+
   // Configure serial transport
   Serial.begin(115200);
   set_microros_serial_transports(Serial);
@@ -245,14 +260,14 @@ void setup()
   RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
 
   // create node
-  RCCHECK(rclc_node_init_default(&node, "micro_ros_platformio_node", "", &support));
+  RCCHECK(rclc_node_init_default(&node, "micro_ros_node", "", &support));
 
   // create publisher
   RCCHECK(rclc_publisher_init_default(
       &health_publisher,
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
-      "micro_ros_platformio_time_elapsed"));
+      "micro_ros_node_health"));
   RCCHECK(rclc_publisher_init_default(
       &wheels_publisher,
       &node,
@@ -266,6 +281,9 @@ void setup()
       ROSIDL_GET_MSG_TYPE_SUPPORT(robot_messages, msg, WheelsCommand),
       "/wheel_commands"));
 
+  // Create parameter service
+  RCCHECK(rclc_parameter_server_init_default(&param_server, &node));
+
   // create timer,
   RCCHECK(rclc_timer_init_default2(
       &health_timer,
@@ -278,32 +296,26 @@ void setup()
       RCL_MS_TO_NS(wheels_timer_timeout),
       wheels_timer_callback, true));
 
-  // init msgs
-  health_msg.data = 0;
-  init_wheel_joint_message();
-
-  // Create parameter service
-  RCCHECK(rclc_parameter_server_init_default(&param_server, &node));
+  // create executor
+  RCCHECK(rclc_executor_init(&executor, &support.context, RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES + 3, &allocator));
+  RCCHECK(rclc_executor_add_parameter_server(&executor, &param_server, on_parameter_changed));
+  RCCHECK(rclc_executor_add_timer(&executor, &health_timer));
+  RCCHECK(rclc_executor_add_timer(&executor, &wheels_timer));
+  RCCHECK(rclc_executor_add_subscription(&executor, &wheels_subscriber, &wheels_speed_msg, &wheels_command_callback, ON_NEW_DATA));
 
   // Add parameters
   RCCHECK(rclc_add_parameter(&param_server, "wheels_current", RCLC_PARAMETER_INT));
   RCCHECK(rclc_add_parameter(&param_server, "wheels_feedback_frequency", RCLC_PARAMETER_INT));
 
-  RCCHECK(rclc_parameter_set_int(&param_server, "wheels_current", wheels->get_current()));
-  RCCHECK(rclc_parameter_set_int(&param_server, "wheels_feedback_frequency", (int64_t)(1000 / wheels_timer_timeout)));
-
   // Add parameters constraints
   RCCHECK(rclc_add_parameter_description(&param_server, "wheels_current", "Courant en mA utilisé pour les steppers", "Positif, inférieur à 2000"));
   RCCHECK(rclc_add_parameter_description(&param_server, "wheels_feedback_frequency", "Fréquence d'envoie des jointState des roues", "Positif, inférieur à 50Hz (arbitraire)"));
   RCCHECK(rclc_add_parameter_constraint_integer(&param_server, "wheels_current", 0, 2000, 1));
-  RCCHECK(rclc_add_parameter_constraint_integer(&param_server, "wheels_feedback_frequency", 1, 50, 1));
+  //RCCHECK(rclc_add_parameter_constraint_integer(&param_server, "wheels_feedback_frequency", 1, 50, 1));
 
-  // create executor
-  RCCHECK(rclc_executor_init(&executor, &support.context, 3, &allocator));
-  RCCHECK(rclc_executor_add_timer(&executor, &health_timer));
-  RCCHECK(rclc_executor_add_timer(&executor, &wheels_timer));
-  RCCHECK(rclc_executor_add_subscription(&executor, &wheels_subscriber, &wheels_speed_msg, &wheels_command_callback, ON_NEW_DATA));
-  RCCHECK(rclc_executor_add_parameter_server(&executor, &param_server, on_parameter_changed));
+  // Set parameter initial values
+  RCCHECK(rclc_parameter_set_int(&param_server, "wheels_current", wheels->get_current()));
+  RCCHECK(rclc_parameter_set_int(&param_server, "wheels_feedback_frequency", (int64_t)(1000 / wheels_timer_timeout)));
 
   // sync time
   while (rmw_uros_sync_session(1000) != RMW_RET_OK)
