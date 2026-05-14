@@ -346,7 +346,7 @@ void setup()
 
   // Set parameter initial values
   RCCHECK(rclc_parameter_set_int(&param_server, "wheels_current", wheels->get_current()));
-  RCCHECK(rclc_parameter_set_int(&param_server, "wheels_feedback_frequency", (int64_t)(1000 / wheels_timer_timeout)));
+  //RCCHECK(rclc_parameter_set_int(&param_server, "wheels_feedback_frequency", (int64_t)(1000 / wheels_timer_timeout))); If activated we get a frequency of 1hz for some reason...
 
   // sync time
   while (rmw_uros_sync_session(1000) != RMW_RET_OK)
