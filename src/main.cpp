@@ -16,7 +16,7 @@
 #include "battery.h"
 #include "Wheels.h"
 
-const unsigned int health_timer_timeout = 1000; // ms
+const unsigned int health_timer_timeout = 2000; // ms
 unsigned int wheels_timer_timeout = 100;
 
 rcl_publisher_t health_publisher;
@@ -94,6 +94,22 @@ std_msgs__msg__Bool button_msg;
       log_e("Soft rclc error %d: %s at %s:%d", temp_rc, rcl_get_error_string().str, __FILE__, __LINE__); \
     }                                                                                                    \
   } while (0)
+
+void check_ros_connection() {
+  // Ping the agent with a 100ms timeout and 1 attempt
+  if (rmw_uros_ping_agent(100, 1) != RMW_RET_OK) {
+    log_e("Micro-ROS Agent lost! Resetting board...");
+    
+    // Safety: Stop motors before resetting if possible
+    if (wheels != NULL) {
+      wheels->set_speed(0, 0, 0, 0);
+      wheels->disable_motors();
+    }
+    
+    delay(500); // Give logs time to send
+    esp_restart(); 
+  }
+}
 
 void check_battery()
 {
@@ -192,6 +208,7 @@ void health_timer_callback(rcl_timer_t *timer, int64_t last_call_time)
   RCLC_UNUSED(last_call_time);
   if (timer != NULL)
   {
+    check_ros_connection();
     health_msg.data = measure_battery();
     log_i("Publishing health (%d millivolts)", health_msg.data);
     RCSOFTCHECK(rcl_publish(&health_publisher, &health_msg, NULL));
