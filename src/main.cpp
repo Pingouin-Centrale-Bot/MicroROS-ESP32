@@ -7,6 +7,7 @@
 #include <rclc_parameter/rclc_parameter.h>
 
 #include <std_msgs/msg/int32.h>
+#include <std_msgs/msg/bool.h>
 #include <sensor_msgs/msg/joint_state.h>
 #include <rosidl_runtime_c/string_functions.h>
 
@@ -70,6 +71,9 @@ rcl_timer_t wheels_timer;
 
 Wheels *wheels = NULL;
 
+rcl_publisher_t button_publisher;
+std_msgs__msg__Bool button_msg;
+
 #define RCCHECK(fn)                                                                                               \
   do                                                                                                              \
   {                                                                                                               \
@@ -93,7 +97,7 @@ Wheels *wheels = NULL;
 
 void check_battery()
 {
-  if (battery_empty)
+  if (battery_empty && false) // Not needed anymore because of power board
   {
     wheels->disable_motors();
     log_e("Battery empty ! (%d millivolts)", measure_battery());
@@ -217,6 +221,9 @@ void wheels_timer_callback(rcl_timer_t *timer, int64_t last_call_time)
     wheels_state_msg.position.data[3] = current_state.p4;
 
     RCSOFTCHECK(rcl_publish(&wheels_publisher, &wheels_state_msg, NULL));
+
+    button_msg.data = (digitalRead(TIRETTE_PIN) == LOW);
+    RCSOFTCHECK(rcl_publish(&button_publisher, &button_msg, NULL));
   }
 }
 
@@ -238,13 +245,16 @@ void setup()
   init_battery();
   check_battery();
 
+  // Tirette
+  pinMode(TIRETTE_PIN, INPUT_PULLUP);
+
   // init msgs
   health_msg.data = 0;
   init_wheel_joint_message();
 
   // Configure serial transport
-  Serial.begin(115200);
-  set_microros_serial_transports(Serial);
+  Serial0.begin(115200);
+  set_microros_serial_transports(Serial0);
 
   while (rmw_uros_ping_agent(1000, 1) != RMW_RET_OK)
   {
@@ -272,6 +282,11 @@ void setup()
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, JointState),
       "/micro_controller/joint_states"));
+  RCCHECK(rclc_publisher_init_default(
+      &button_publisher,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
+      "/tirette_state"));
 
   // create subscriber
   RCCHECK(rclc_subscription_init_default(
