@@ -35,3 +35,4 @@
 #define ODOM_CORRECTION_ROTATION 1.012    //
 
 #define TIRETTE_PIN 21
+#define SERVO_THERMO 41

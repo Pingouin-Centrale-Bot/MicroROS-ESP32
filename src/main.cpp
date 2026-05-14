@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <micro_ros_platformio.h>
+#include <ESP32Servo.h>
 
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
@@ -7,6 +8,7 @@
 #include <rclc_parameter/rclc_parameter.h>
 
 #include <std_msgs/msg/int32.h>
+#include <std_msgs/msg/int8.h>
 #include <std_msgs/msg/bool.h>
 #include <sensor_msgs/msg/joint_state.h>
 #include <rosidl_runtime_c/string_functions.h>
@@ -15,6 +17,12 @@
 
 #include "battery.h"
 #include "Wheels.h"
+
+// Servo thermo
+const int thermo_angles[3] = {90, 0, 180};
+Servo servo_thermo;
+rcl_subscription_t servo_thermo_subscriber;
+std_msgs__msg__Int8 servo_thermo_msg;
 
 const unsigned int health_timer_timeout = 2000; // ms
 unsigned int wheels_timer_timeout = 100;
@@ -254,6 +262,16 @@ void wheels_command_callback(const void *msgin)
   }
 }
 
+void servo_thermo_callback(const void *msgin) {
+  const std_msgs__msg__Int8 *msg = (const std_msgs__msg__Int8 *)msgin;
+  if (msg->data >= 0 && msg->data < 3) {
+    servo_thermo.write(thermo_angles[msg->data]);
+    log_i("Thermo servo set to %d°", thermo_angles[msg->data]);
+  } else {
+    log_e("Thermo servo angle request invalid : received %d.", msg->data);
+  }
+}
+
 void setup()
 {
   log_i("Initializing");
@@ -264,6 +282,10 @@ void setup()
 
   // Tirette
   pinMode(TIRETTE_PIN, INPUT_PULLUP);
+
+  // Servo
+  servo_thermo.attach(SERVO_THERMO);
+  servo_thermo.write(thermo_angles[0]);
 
   // init msgs
   health_msg.data = 0;
@@ -311,6 +333,11 @@ void setup()
       &node,
       ROSIDL_GET_MSG_TYPE_SUPPORT(robot_messages, msg, WheelsCommand),
       "/wheel_commands"));
+  RCCHECK(rclc_subscription_init_default(
+      &servo_thermo_subscriber,
+      &node,
+      ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int8),
+      "/servo_thermo"));
 
   // Create parameter service
   RCCHECK(rclc_parameter_server_init_default(&param_server, &node));
@@ -328,11 +355,12 @@ void setup()
       wheels_timer_callback, true));
 
   // create executor
-  RCCHECK(rclc_executor_init(&executor, &support.context, RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES + 3, &allocator));
+  RCCHECK(rclc_executor_init(&executor, &support.context, RCLC_EXECUTOR_PARAMETER_SERVER_HANDLES + 4, &allocator));
   RCCHECK(rclc_executor_add_parameter_server(&executor, &param_server, on_parameter_changed));
   RCCHECK(rclc_executor_add_timer(&executor, &health_timer));
   RCCHECK(rclc_executor_add_timer(&executor, &wheels_timer));
   RCCHECK(rclc_executor_add_subscription(&executor, &wheels_subscriber, &wheels_speed_msg, &wheels_command_callback, ON_NEW_DATA));
+  RCCHECK(rclc_executor_add_subscription(&executor, &servo_thermo_subscriber, &servo_thermo_msg, &servo_thermo_callback, ON_NEW_DATA));
 
   // Add parameters
   RCCHECK(rclc_add_parameter(&param_server, "wheels_current", RCLC_PARAMETER_INT));
